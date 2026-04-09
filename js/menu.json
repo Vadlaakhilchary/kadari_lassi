@@ -1,0 +1,34 @@
+[
+    {
+        "id": 1,
+        "name": "Classic Lassi",
+        "price": 70,
+        "description": "The timeless original. Chilled, thick, and perfectly blended with pure curd and a touch of sweetness.",
+        "badge": "Popular",
+        "emoji": "🥛"
+    },
+    {
+        "id": 2,
+        "name": "No Sugar Lassi",
+        "price": 80,
+        "description": "A healthier choice without compromising taste. Pure curd, no added sugar — naturally refreshing.",
+        "badge": "Healthy",
+        "emoji": "🍃"
+    },
+    {
+        "id": 3,
+        "name": "Dry Fruit Lassi",
+        "price": 90,
+        "description": "Rich and indulgent. Topped with hand-picked dry fruits — almonds, cashews, and pistachios.",
+        "badge": "Premium",
+        "emoji": "🥜"
+    },
+    {
+        "id": 4,
+        "name": "Special Kadari Lassi",
+        "price": 100,
+        "description": "The crown jewel. A secret family recipe passed down through generations — one sip tells the story.",
+        "badge": "Signature",
+        "emoji": "✨"
+    }
+]
