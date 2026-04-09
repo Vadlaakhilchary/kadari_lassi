@@ -403,18 +403,43 @@ async function loadAndRenderMenu() {
     console.log('✅ Found main-menu-grid element');
     
     try {
-        console.log('📂 Attempting to load menu from js/menu.json...');
-        const response = await fetch('js/menu.json');
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        // Try backend API first
+        console.log('📡 Attempting to load menu from backend API (http://localhost:5000)...');
+        const response = await fetch('http://localhost:5000/api/menu', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data) {
+                console.log('✅ Menu loaded successfully from backend API:', result.data);
+                renderMenu(result.data);
+                return;
+            }
         }
-        const menuItems = await response.json();
-        console.log('✅ Menu loaded successfully from JSON:', menuItems);
-        renderMenu(menuItems);
+        throw new Error('Backend API response not successful');
     } catch (error) {
-        console.warn("⚠️ Could not load menu from JSON, using fallback:", error);
-        console.log('📋 Using ' + fallbackMenuItems.length + ' fallback items');
-        renderMenu(fallbackMenuItems);
+        console.warn("⚠️ Could not load menu from backend API:", error);
+        
+        // Fallback to JSON file
+        try {
+            console.log('📂 Attempting to load menu from js/menu.json...');
+            const response = await fetch('js/menu.json');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const menuItems = await response.json();
+            console.log('✅ Menu loaded successfully from JSON:', menuItems);
+            renderMenu(menuItems);
+            return;
+        } catch (jsonError) {
+            console.warn("⚠️ Could not load menu from JSON, using fallback:", jsonError);
+            console.log('📋 Using ' + fallbackMenuItems.length + ' fallback items');
+            renderMenu(fallbackMenuItems);
+        }
     }
 }
 

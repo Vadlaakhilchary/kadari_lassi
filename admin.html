@@ -388,18 +388,35 @@
         });
 
         // ========== SYNC ==========
-        function syncToMainSite() {
-            const json = JSON.stringify(menuItems, null, 2);
-            const blob = new Blob([json], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'menu.json';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            showToast('✅ menu.json file downloaded!', 'success');
+        async function syncToMainSite() {
+            try {
+                console.log('🔄 Syncing menu to backend...', menuItems);
+                
+                const response = await fetch('http://localhost:5000/api/menu/sync/all', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ items: menuItems })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('✅ ' + result.message, 'success');
+                    console.log('✅ Sync successful:', result);
+                } else {
+                    showToast('❌ ' + result.error, 'error');
+                    console.error('❌ Sync failed:', result);
+                }
+            } catch (error) {
+                console.error('❌ Error syncing to backend:', error);
+                showToast('❌ Failed to sync! Is the backend running on port 5000?', 'error');
+            }
         }
 
         // ========== STATS ==========
