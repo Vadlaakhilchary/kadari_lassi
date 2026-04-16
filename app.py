@@ -3,18 +3,35 @@ Kadari Lassi Backend API
 Flask server with SQLite database for menu management
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import sqlite3
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 
-app = Flask(__name__)
-CORS(app)
+app = Flask(__name__, static_folder='.', static_url_path='')
 
-# Database configuration
-DB_FILE = 'menu_data.db'
+# CORS Configuration - Restrict to your domains in production
+allowed_origins = [
+    "http://localhost:3000",
+    "http://localhost:5000",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5000",
+    "http://localhost",
+    "http://127.0.0.1",
+]
+
+# Add environment-based origins
+if os.getenv('ALLOWED_ORIGINS'):
+    allowed_origins.extend(os.getenv('ALLOWED_ORIGINS', '').split(','))
+
+CORS(app, origins=allowed_origins)
+
+# Database configuration - Use absolute path for production compatibility
+DB_DIR = os.getenv('DB_DIR', os.path.dirname(os.path.abspath(__file__)))
+DB_FILE = os.path.join(DB_DIR, 'menu_data.db')
 
 # Initialize database
 def init_db():
@@ -95,6 +112,15 @@ def row_to_dict(row):
     if row is None:
         return None
     return dict(row)
+
+# ========================
+# HOME ROUTE
+# ========================
+
+@app.route('/')
+def index():
+    """Serve the home page"""
+    return send_from_directory('.', 'index.html')
 
 # ========================
 # API ENDPOINTS
@@ -297,12 +323,21 @@ if __name__ == '__main__':
     # Initialize database
     init_db()
     
+    # Get configuration from environment variables
+    flask_env = os.getenv('FLASK_ENV', 'development')
+    flask_debug = flask_env == 'development'
+    flask_host = os.getenv('FLASK_HOST', '0.0.0.0')
+    flask_port = int(os.getenv('FLASK_PORT', 5000))
+    
     print("=" * 50)
     print("🚀 Kadari Lassi Backend API")
     print("=" * 50)
-    print("✅ Database initialized")
-    print("📡 API running on http://localhost:5000")
+    print(f"✅ Database initialized at: {DB_FILE}")
+    print(f"📡 Environment: {flask_env}")
+    print(f"📡 API running on http://{flask_host}:{flask_port}")
+    print(f"🔒 Debug Mode: {flask_debug}")
+    print(f"🌐 Allowed Origins: {allowed_origins}")
     print("=" * 50)
     
-    # Run Flask app
-    app.run(debug=True, port=5000, host='localhost')
+    # Run Flask app with production-ready configuration
+    app.run(debug=flask_debug, port=flask_port, host=flask_host, threaded=True)

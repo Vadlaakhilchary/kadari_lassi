@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kadari Admin Panel</title>
+    <link rel="icon" type="image/png" href="images/k_logo.png">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0a1628; color: #fff; min-height: 100vh; }
@@ -392,7 +393,11 @@
             try {
                 console.log('🔄 Syncing menu to backend...', menuItems);
                 
-                const response = await fetch('http://localhost:5000/api/menu/sync/all', {
+                const apiUrl = window.location.hostname === 'localhost'
+                    ? 'http://localhost:5000/api/menu/sync/all'
+                    : '/api/menu/sync/all';
+                
+                const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -456,5 +461,10 @@
         // ========== START ==========
         init();
     </script>
+
+    <!-- WhatsApp Button -->
+    <a href="https://wa.me/919885080489?text=Hi%20Kadari%27s%20Lassi%20%21%20I%20want%20to%20know%20more%20about%20your%20lassi." target="_blank" class="whatsapp-btn" title="Chat with us on WhatsApp">
+        <img src="images/wtsp.png" alt="WhatsApp" class="whatsapp-icon-img">
+    </a>
 </body>
 </html>

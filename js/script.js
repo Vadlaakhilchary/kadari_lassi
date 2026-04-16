@@ -404,8 +404,11 @@ async function loadAndRenderMenu() {
     
     try {
         // Try backend API first
-        console.log('📡 Attempting to load menu from backend API (http://localhost:5000)...');
-        const response = await fetch('http://localhost:5000/api/menu', {
+        const apiUrl = window.location.hostname === 'localhost' 
+            ? 'http://localhost:5000/api/menu'
+            : '/api/menu';
+        console.log('📡 Attempting to load menu from backend API:', apiUrl);
+        const response = await fetch(apiUrl, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json'
@@ -486,5 +489,22 @@ window.addEventListener('load', () => {
     if (grid && grid.children.length === 0) {
         console.log('⚠️ Menu still empty on window load, rendering fallback');
         renderMenu(fallbackMenuItems);
+    }
+});
+
+// ===========================
+// WhatsApp Button Functionality
+// ===========================
+// UPDATE THE PHONE NUMBER BELOW WITH YOUR ACTUAL WHATSAPP NUMBER
+const WHATSAPP_PHONE_NUMBER = '919999999999'; // Format: country code + number (without +)
+
+document.addEventListener('DOMContentLoaded', () => {
+    const whatsappBtn = document.querySelector('.whatsapp-btn');
+    
+    if (whatsappBtn) {
+        whatsappBtn.addEventListener('click', (e) => {
+            // The href is already set, but we can add additional functionality here
+            console.log('✅ WhatsApp button clicked - redirecting to WhatsApp chat');
+        });
     }
 });
