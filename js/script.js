@@ -1,5 +1,28 @@
+/**
+ * Main Website Script - Firebase Firestore Edition
+ * 
+ * Handles:
+ * - Navigation & menu
+ * - Menu loading from Firestore
+ * - Category grouping
+ * - Dynamic rendering
+ * - Image error handling
+ */
+
+// ========================
+// FIRESTORE IMPORTS
+// ========================
+import { 
+  db, 
+  collection, 
+  getDocs, 
+  query, 
+  where,
+  initialized as firebaseInitialized 
+} from './firebase-config.js';
+
 // ===========================
-// Scroll to Top on Page Load
+// PAGE INITIALIZATION
 // ===========================
 function scrollToTop() {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
@@ -7,56 +30,280 @@ function scrollToTop() {
     document.body.scrollTop = 0;
 }
 
-// Run immediately
-scrollToTop();
-
-// Run on DOMContentLoaded
 document.addEventListener('DOMContentLoaded', scrollToTop);
-
-// Run on load
 window.addEventListener('load', scrollToTop);
-
-// Run with small delay to be sure
 setTimeout(scrollToTop, 100);
 setTimeout(scrollToTop, 500);
 
 // ===========================
-// Image Loading & Error Handling
+// FALLBACK MENU (For development/offline)
 // ===========================
-function handleMenuImageError(imgElement, menuIndex) {
-    imgElement.style.display = 'none';
-    const placeholder = document.getElementById(`menu-placeholder-${menuIndex}`);
-    if (placeholder) {
-        placeholder.style.display = 'flex';
+const fallbackMenuItems = [
+    {
+        id: "1",
+        name: "Classic Lassi",
+        price: 70,
+        unit: "glass",
+        category: "Lassi",
+        description: "The timeless original. Chilled, thick, and perfectly blended with pure curd and a touch of sweetness.",
+        available: true,
+        emoji: "🥛"
+    },
+    {
+        id: "2",
+        name: "No Sugar Lassi",
+        price: 80,
+        unit: "glass",
+        category: "Lassi",
+        description: "A healthier choice without compromising taste. Pure curd, no added sugar — naturally refreshing.",
+        available: true,
+        emoji: "🍃"
+    },
+    {
+        id: "3",
+        name: "Dry Fruit Lassi",
+        price: 90,
+        unit: "glass",
+        category: "Lassi",
+        description: "Rich and indulgent. Topped with hand-picked dry fruits — almonds, cashews, and pistachios.",
+        available: true,
+        emoji: "🥜"
+    },
+    {
+        id: "4",
+        name: "Special Kadari Lassi",
+        price: 100,
+        unit: "glass",
+        category: "Lassi",
+        description: "The crown jewel. A secret family recipe passed down through generations — one sip tells the story.",
+        available: true,
+        emoji: "✨"
+    }
+];
+
+// ===========================
+// STATE
+// ===========================
+let allMenuItems = [];
+let groupedByCategory = {};
+
+// ===========================
+// FIRESTORE MENU LOADING
+// ===========================
+/**
+ * Load menu items from Firestore
+ * - Fetches all available menu items from 'menuItems' collection
+ * - Only includes items where available === true
+ * - Returns grouped by category
+ */
+async function loadMenuFromFirestore() {
+    try {
+        console.log("🔄 Loading menu from Firestore...");
+
+        // Fetch all documents from menuItems collection
+        const snapshot = await getDocs(collection(db, "menuItems"));
+        console.log(`📊 Total docs in Firestore: ${snapshot.size}`);
+
+        const items = [];
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            console.log("📄 Document:", data);
+            
+            // Filter only available items
+            if (data.available === true) {
+                items.push({
+                    id: doc.id,
+                    ...data
+                });
+            }
+        });
+
+        console.log(`✅ Filtered items (available=true): ${items.length}`, items);
+        return items;
+
+    } catch (error) {
+        console.error("❌ Firestore error:", error);
+        console.warn("⚠️ Using fallback menu");
+        return fallbackMenuItems;
     }
 }
 
+// ===========================
+// CATEGORY GROUPING
+// ===========================
+/**
+ * Group menu items by category
+ */
+function groupByCategory(items) {
+    const grouped = {};
+    
+    items.forEach(item => {
+        const category = item.category || 'Uncategorized';
+        if (!grouped[category]) {
+            grouped[category] = [];
+        }
+        grouped[category].push(item);
+    });
+
+    return grouped;
+}
+
+// ===========================
+// MENU RENDERING
+// ===========================
+/**
+ * Render grouped menu items to the DOM
+ */
+function renderMenu(groupedItems) {
+    const menuGrid = document.getElementById('main-menu-grid');
+    
+    if (!menuGrid) {
+        console.error('❌ Menu grid element not found');
+        return;
+    }
+
+    menuGrid.innerHTML = '';
+
+    // Check for empty state
+    if (!groupedItems || Object.keys(groupedItems).length === 0) {
+        menuGrid.innerHTML = `
+            <div style="grid-column: 1/-1; text-align: center; padding: 3rem; color: #b0c4de;">
+                <p style="font-size: 1.1rem;">No menu items available</p>
+                <p style="font-size: 0.9rem; margin-top: 0.5rem;">Check back soon!</p>
+            </div>
+        `;
+        return;
+    }
+
+    let itemCount = 0;
+
+    // Render each category
+    Object.entries(groupedItems).forEach(([category, items]) => {
+        items.forEach((item) => {
+            try {
+                const cardElement = document.createElement('div');
+                cardElement.className = 'menu-card';
+                cardElement.setAttribute('data-category', category);
+                
+                const emoji = item.emoji || '🥛';
+                const price = item.price ? `₹${item.price}` : 'N/A';
+
+                // Safely handle missing/invalid image URLs
+                // Show emoji fallback if image fails or is missing
+                cardElement.innerHTML = `
+                    <div class="menu-icon">
+                        <img src="${item.image || ''}" 
+                             alt="${item.name}" 
+                             class="menu-image"
+                             onload="this.nextElementSibling.style.display='none';"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <div class="emoji-fallback" style="display: none; align-items: center; justify-content: center; width: 100%; height: 100%; min-height: 150px;">
+                            <span style="font-size: 2rem;">${emoji}</span>
+                        </div>
+                    </div>
+                    <h3>${item.name}</h3>
+                    <p class="menu-description">${item.description || 'Delicious Lassi'}</p>
+                    <div class="menu-pricing">
+                        <div class="price-option">
+                            <span class="price">₹${item.price} / ${item.unit || 'item'}</span>
+                        </div>
+                    </div>
+                `;
+
+                menuGrid.appendChild(cardElement);
+                itemCount++;
+
+            } catch (error) {
+                console.error(`Error rendering item ${item.name}:`, error);
+            }
+        });
+    });
+
+    console.log(`✅ Rendered ${itemCount} menu items`);
+}
+
+// ===========================
+// LOADING SPINNER
+// ===========================
+function showLoadingSpinner() {
+    const menuGrid = document.getElementById('main-menu-grid');
+    if (menuGrid) {
+        menuGrid.innerHTML = `
+            <div style="grid-column: 1/-1; text-align: center; padding: 3rem;">
+                <div style="display: inline-block; border: 3px solid rgba(212, 175, 55, 0.2); border-top: 3px solid #d4af37; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
+                <p style="margin-top: 1rem; color: #b0c4de;">Loading menu...</p>
+                <style>
+                    @keyframes spin {
+                        0% { transform: rotate(0deg); }
+                        100% { transform: rotate(360deg); }
+                    }
+                </style>
+            </div>
+        `;
+    }
+}
+
+// ===========================
+// INITIALIZE MENU
+// ===========================
+async function initializeMenu() {
+    showLoadingSpinner();
+    
+    try {
+        // Load menu from Firestore
+        allMenuItems = await loadMenuFromFirestore();
+        
+        // Group by category
+        groupedByCategory = groupByCategory(allMenuItems);
+        
+        // Render to page
+        renderMenu(groupedByCategory);
+        
+        console.log('✅ Menu initialization complete');
+        
+    } catch (error) {
+        console.error('❌ Failed to initialize menu:', error);
+        // Render fallback
+        groupedByCategory = groupByCategory(fallbackMenuItems);
+        renderMenu(groupedByCategory);
+    }
+}
+
+// Load menu when page is ready
+document.addEventListener('DOMContentLoaded', initializeMenu);
+
+// Fallback: Try immediately if DOM is ready
+if (document.readyState !== 'loading') {
+    console.log('Document already loaded, initializing menu...');
+    initializeMenu();
+}
+
+// Debug function - check ALL items in Firestore (no filter)
+window.debugFirestore = async function() {
+    console.log("🔍 Checking ALL items in Firestore (no filter)...");
+    const snapshot = await getDocs(collection(db, "menuItems"));
+    snapshot.forEach((doc) => {
+        console.log(`📄 ID: ${doc.id}`, doc.data());
+    });
+}
+
+// ===========================
+// IMAGE HANDLING
+// ===========================
 function checkImagesOnLoad() {
     const images = document.querySelectorAll('.product-image, .menu-image');
-    images.forEach((img, index) => {
-        if (!img.complete) {
-            img.addEventListener('load', function() {
-                // Image loaded successfully
-            });
-            img.addEventListener('error', function() {
-                // Image failed to load
-                img.style.display = 'none';
-            });
-        } else if (img.naturalHeight === 0) {
-            // Image already failed or doesn't exist
+    images.forEach((img) => {
+        if (!img.complete || img.naturalHeight === 0) {
             img.style.display = 'none';
         }
     });
 }
 
-// Check images when page loads
 document.addEventListener('DOMContentLoaded', checkImagesOnLoad);
-
-// Also check when entire page is fully loaded
 window.addEventListener('load', checkImagesOnLoad);
 
 // ===========================
-// Hamburger Menu & Navigation Setup
+// HAMBURGER MENU & NAVIGATION
 // ===========================
 document.addEventListener('DOMContentLoaded', () => {
     const hamburgerBtn = document.getElementById('hamburger-btn');
@@ -69,102 +316,47 @@ document.addEventListener('DOMContentLoaded', () => {
             e.stopPropagation();
             hamburgerBtn.classList.toggle('active');
             navMenu.classList.toggle('active');
-            console.log('Hamburger clicked, menu active:', navMenu.classList.contains('active'));
         });
 
-        // Handle all nav link clicks
+        // Handle nav link clicks
         navLinks.forEach(link => {
             link.addEventListener('click', (e) => {
-                e.preventDefault();
-                const targetId = link.getAttribute('href');
-                const targetElement = document.querySelector(targetId);
+                const href = link.getAttribute('href');
                 
-                console.log('Nav link clicked:', targetId);
-                
-                // Close menu immediately
-                hamburgerBtn.classList.remove('active');
-                navMenu.classList.remove('active');
-                
-                if (targetElement) {
-                    // Add small delay for menu to close
-                    setTimeout(() => {
-                        targetElement.scrollIntoView({ behavior: 'smooth' });
-                    }, 150);
+                // Only handle anchor links (#) with smooth scroll
+                if (href && href.startsWith('#')) {
+                    const anchorId = href.substring(1);
+                    const targetElement = document.getElementById(anchorId);
+                    
+                    if (targetElement) {
+                        e.preventDefault();
+                        hamburgerBtn.classList.remove('active');
+                        navMenu.classList.remove('active');
+                        
+                        setTimeout(() => {
+                            targetElement.scrollIntoView({ behavior: 'smooth' });
+                        }, 150);
+                    }
+                } else {
+                    // For page links (.html), just close the menu and let browser navigate
+                    hamburgerBtn.classList.remove('active');
+                    navMenu.classList.remove('active');
                 }
             });
         });
 
-        // Close menu when clicking outside navbar
+        // Close menu when clicking outside
         document.addEventListener('click', (e) => {
             if (!e.target.closest('.navbar') && navMenu.classList.contains('active')) {
                 hamburgerBtn.classList.remove('active');
                 navMenu.classList.remove('active');
-                console.log('Clicked outside, menu closed');
             }
         });
     }
 });
 
 // ===========================
-// Scroll Animation Observer - DISABLED FOR NOW
-// ===========================
-// TODO: Re-enable animation with proper menu loading handling
-// const observerOptions = {
-//     threshold: 0.1,
-//     rootMargin: '0px 0px -50px 0px'
-// };
-//
-// const observer = new IntersectionObserver((entries) => {
-//     entries.forEach(entry => {
-//         if (entry.isIntersecting) {
-//             entry.target.style.opacity = '1';
-//             entry.target.style.transform = 'translateY(0)';
-//             observer.unobserve(entry.target);
-//         }
-//     });
-// }, observerOptions);
-
-// All elements visible by default
-console.log('✅ Animations disabled for stability');
-
-// All cards visible - no animation observer
-console.log('✅ Observer elements skipped - all cards visible by default');
-
-// ===========================
-// Hero Section Buttons
-// ===========================
-document.querySelectorAll('.hero-buttons .btn').forEach((btn, index) => {
-    btn.addEventListener('click', () => {
-        if (index === 0) {
-            // View Menu button
-            document.querySelector('#menu').scrollIntoView({ behavior: 'smooth' });
-        } else {
-            // Our Story button
-            document.querySelector('#about').scrollIntoView({ behavior: 'smooth' });
-        }
-    });
-});
-
-// ===========================
-// Contact Button Handler (Scroll to Contact)
-// ===========================
-function scrollToContact() {
-    const contactSection = document.querySelector('#contact');
-    if (contactSection) {
-        contactSection.scrollIntoView({ behavior: 'smooth' });
-    }
-}
-
-// ===========================
-// Why Us Visit Button
-// ===========================
-const visitBtn = document.querySelector('.why-us .btn-primary');
-if (visitBtn) {
-    visitBtn.addEventListener('click', scrollToContact);
-}
-
-// ===========================
-// Active Navigation Link Update
+// ACTIVE NAVIGATION LINK
 // ===========================
 function updateActiveNavLink() {
     const sections = document.querySelectorAll('section[id]');
@@ -178,13 +370,11 @@ function updateActiveNavLink() {
         }
     });
 
-    // Remove active styling from all links
     navLinks.forEach(link => {
         link.style.color = '';
         link.style.fontWeight = '400';
     });
 
-    // Add active styling to current section link
     if (currentSection) {
         const activeLink = document.querySelector(`.nav-link[href="#${currentSection}"]`);
         if (activeLink) {
@@ -194,33 +384,63 @@ function updateActiveNavLink() {
     }
 }
 
-// Call on page load to set initial active link
 document.addEventListener('DOMContentLoaded', updateActiveNavLink);
-
-// Update on scroll
 window.addEventListener('scroll', updateActiveNavLink);
 
 // ===========================
-// Order Now Button Handlers
+// HERO BUTTONS
+// ===========================
+document.addEventListener('DOMContentLoaded', () => {
+    const heroButtons = document.querySelectorAll('.hero-buttons .btn');
+    if (heroButtons.length > 0) {
+        heroButtons.forEach((btn) => {
+            const href = btn.getAttribute('href');
+            if (href && !href.startsWith('https')) { // It's an internal link
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const targetElement = document.querySelector(href);
+                    if (targetElement) {
+                        targetElement.scrollIntoView({ behavior: 'smooth' });
+                    } else {
+                        window.location.href = href;
+                    }
+                });
+            }
+        });
+    }
+});
+
+// ===========================
+// CONTACT & ORDER BUTTONS
+// ===========================
+function scrollToContact() {
+    const contactSection = document.querySelector('#contact');
+    if (contactSection) {
+        contactSection.scrollIntoView({ behavior: 'smooth' });
+    }
+}
+
+const visitBtn = document.querySelector('.why-us .btn-primary');
+if (visitBtn) {
+    visitBtn.addEventListener('click', scrollToContact);
+}
+
+// ===========================
+// ORDER BUTTONS
 // ===========================
 document.querySelectorAll('.btn-order').forEach((btn, index) => {
     btn.addEventListener('click', () => {
         const platforms = ['Swiggy', 'Zomato'];
         alert(`Redirecting to ${platforms[index]}...\n\nIn production, this would link to the actual delivery platform.`);
-        // In production, replace with actual links:
-        // if (index === 0) window.open('https://swiggy.com', '_blank');
-        // else window.open('https://zomato.com', '_blank');
     });
 });
 
 // ===========================
-// Navbar Background on Scroll
+// NAVBAR SCROLL EFFECT
 // ===========================
-let lastScrollTop = 0;
 const navbar = document.querySelector('.navbar');
-
 window.addEventListener('scroll', () => {
-    let currentScroll = window.pageYOffset;
+    const currentScroll = window.pageYOffset;
     
     if (currentScroll > 50) {
         navbar.style.borderBottom = '1px solid rgba(212, 175, 55, 0.3)';
@@ -229,24 +449,12 @@ window.addEventListener('scroll', () => {
         navbar.style.borderBottom = '1px solid rgba(212, 175, 55, 0.2)';
         navbar.style.boxShadow = 'none';
     }
-    
-    lastScrollTop = currentScroll <= 0 ? 0 : currentScroll;
 });
 
 // ===========================
-// Interactive Card Effects
-// ===========================
-document.querySelectorAll('.menu-card, .benefit-card, .contact-card, .order-card, .about-card').forEach(card => {
-    card.addEventListener('mouseenter', () => {
-        card.style.transform = card.style.transform || '';
-    });
-});
-
-// ===========================
-// Page Load Animation
+// PAGE LOAD ANIMATION
 // ===========================
 document.addEventListener('DOMContentLoaded', () => {
-    // Fade in hero content
     const heroContent = document.querySelector('.hero-content');
     if (heroContent) {
         heroContent.style.animation = 'fadeInUp 0.8s ease-out 0.2s both';
@@ -258,7 +466,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Add animation keyframes dynamically
 const style = document.createElement('style');
 style.textContent = `
     @keyframes fadeInUp {
@@ -275,228 +482,11 @@ style.textContent = `
 document.head.appendChild(style);
 
 // ===========================
-// Console Easter Egg
+// CONSOLE
 // ===========================
-console.log('%c🥤 Welcome to Kadari Lassi Corner', 'font-size: 20px; font-weight: bold; color: #d4af37;');
+console.log('%c🥤 Welcome to Kadari Lassi', 'font-size: 18px; font-weight: bold; color: #d4af37;');
 console.log('%cServing authentic taste since 1991', 'font-size: 12px; color: #e0e0e0;');
-
-// ===========================
-// Dynamic Menu Loading
-// ===========================
-const fallbackMenuItems = [
-    {
-        "id": 1,
-        "name": "Classic Lassi",
-        "price": 70,
-        "description": "The timeless original. Chilled, thick, and perfectly blended with pure curd and a touch of sweetness.",
-        "badge": "Popular",
-        "emoji": "🥛"
-    },
-    {
-        "id": 2,
-        "name": "No Sugar Lassi",
-        "price": 80,
-        "description": "A healthier choice without compromising taste. Pure curd, no added sugar — naturally refreshing.",
-        "badge": "Healthy",
-        "emoji": "🍃"
-    },
-    {
-        "id": 3,
-        "name": "Dry Fruit Lassi",
-        "price": 90,
-        "description": "Rich and indulgent. Topped with hand-picked dry fruits — almonds, cashews, and pistachios.",
-        "badge": "Premium",
-        "emoji": "🥜"
-    },
-    {
-        "id": 4,
-        "name": "Special Kadari Lassi",
-        "price": 100,
-        "description": "The crown jewel. A secret family recipe passed down through generations — one sip tells the story.",
-        "badge": "Signature",
-        "emoji": "✨"
-    }
-];
-
-function renderMenu(menuItems) {
-    console.log('📍 renderMenu called with:', menuItems.length, 'items');
-    const menuGrid = document.getElementById('main-menu-grid');
-    
-    if (!menuGrid) {
-        console.error('❌ CRITICAL ERROR: Could not find element with id="main-menu-grid"');
-        console.log('📋 Available section IDs:', Array.from(document.querySelectorAll('section[id]')).map(s => s.id));
-        return;
-    }
-    
-    console.log('✅ Found menuGrid element, ready to render');
-    console.log('📊 Grid current HTML:', menuGrid.innerHTML.substring(0, 100));
-    
-    // Force clear
-    menuGrid.innerHTML = '';
-    console.log('🗑️ Cleared grid');
-    
-    let successCount = 0;
-    menuItems.forEach((item, index) => {
-        try {
-            const isFeatured = item.badge && item.badge.toLowerCase() === 'signature';
-            const cardClass = isFeatured ? 'menu-card featured' : 'menu-card';
-
-            const cardElement = document.createElement('div');
-            cardElement.className = cardClass;
-            cardElement.setAttribute('data-menu-index', index);
-            
-            let badgeHTML = '';
-            if (isFeatured) {
-                badgeHTML = '<div class="menu-badge-featured">House Special</div>';
-            }
-            
-            let priceHTML = '';
-            if (item.price) {
-                priceHTML = `<span class="price">₹${item.price}</span>`;
-            }
-            
-            let bottomBadgeHTML = '';
-            if (item.badge && !isFeatured) {
-                bottomBadgeHTML = `<span class="menu-badge">${item.badge}</span>`;
-            }
-            
-            cardElement.innerHTML = `
-                ${badgeHTML}
-                <div class="menu-icon">
-                    <div class="menu-placeholder">
-                        <span style="font-size: 2rem;">${item.emoji || '🥛'}</span>
-                    </div>
-                </div>
-                <h3>${item.name}</h3>
-                <p class="menu-description">${item.description}</p>
-                <div class="menu-pricing">
-                    <div class="price-option">
-                        ${priceHTML}
-                    </div>
-                </div>
-                ${bottomBadgeHTML}
-            `;
-            
-            menuGrid.appendChild(cardElement);
-            successCount++;
-            console.log(`✅ [${index + 1}/${menuItems.length}] Added: ${item.name}`);
-            
-        } catch (error) {
-            console.error(`❌ Error rendering item ${index}:`, error, item);
-        }
-    });
-    
-    console.log(`🎉 Menu rendering complete! Successfully added ${successCount}/${menuItems.length} items`);
-    console.log('📊 Final grid HTML:', menuGrid.innerHTML.substring(0, 200));
-    console.log('📊 Grid child count:', menuGrid.children.length);
-}
-
-async function loadAndRenderMenu() {
-    console.log('🚀 loadAndRenderMenu called');
-    
-    // Check if menu grid exists
-    const menuGrid = document.getElementById('main-menu-grid');
-    if (!menuGrid) {
-        console.error('❌ CRITICAL: main-menu-grid element not found in DOM!');
-        return;
-    }
-    console.log('✅ Found main-menu-grid element');
-    
-    try {
-        // Try backend API first
-        const apiUrl = window.location.hostname === 'localhost' 
-            ? 'http://localhost:5000/api/menu'
-            : '/api/menu';
-        console.log('📡 Attempting to load menu from backend API:', apiUrl);
-        const response = await fetch(apiUrl, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        if (response.ok) {
-            const result = await response.json();
-            if (result.success && result.data) {
-                console.log('✅ Menu loaded successfully from backend API:', result.data);
-                renderMenu(result.data);
-                return;
-            }
-        }
-        throw new Error('Backend API response not successful');
-    } catch (error) {
-        console.warn("⚠️ Could not load menu from backend API:", error);
-        
-        // Fallback to JSON file
-        try {
-            console.log('📂 Attempting to load menu from js/menu.json...');
-            const response = await fetch('js/menu.json');
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const menuItems = await response.json();
-            console.log('✅ Menu loaded successfully from JSON:', menuItems);
-            renderMenu(menuItems);
-            return;
-        } catch (jsonError) {
-            console.warn("⚠️ Could not load menu from JSON, using fallback:", jsonError);
-            console.log('📋 Using ' + fallbackMenuItems.length + ' fallback items');
-            renderMenu(fallbackMenuItems);
-        }
-    }
-}
-
-// Load menu on page load
-console.log('⏳ Waiting for DOMContentLoaded...');
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('✅ DOMContentLoaded fired, loading menu...');
-    loadAndRenderMenu();
-});
-
-// FALLBACK: Try to load menu immediately if DOM is ready
-console.log('🔥 Attempting immediate menu load...');
-if (document.readyState === 'loading') {
-    console.log('⏳ Document still loading, will wait for DOMContentLoaded');
-} else {
-    console.log('✅ Document already loaded, rendering menu immediately');
-    loadAndRenderMenu();
-}
-
-// FALLBACK: Retry after 500ms
-setTimeout(() => {
-    console.log('⏰ 500ms timeout - retrying menu load...');
-    const grid = document.getElementById('main-menu-grid');
-    if (grid && grid.children.length === 0) {
-        console.log('⚠️ Menu grid still empty, forcing render...');
-        renderMenu(fallbackMenuItems);
-    }
-}, 500);
-
-// FALLBACK: Retry after 1000ms
-setTimeout(() => {
-    console.log('⏰ 1000ms timeout - final check...');
-    const grid = document.getElementById('main-menu-grid');
-    if (grid && grid.children.length === 0) {
-        console.log('🔴 FORCING fallback menu render!');
-        renderMenu(fallbackMenuItems);
-    }
-}, 1000);
-
-// FALLBACK: Load on window load event
-window.addEventListener('load', () => {
-    console.log('📦 Window load event fired');
-    const grid = document.getElementById('main-menu-grid');
-    if (grid && grid.children.length === 0) {
-        console.log('⚠️ Menu still empty on window load, rendering fallback');
-        renderMenu(fallbackMenuItems);
-    }
-});
-
-// ===========================
-// WhatsApp Button Functionality
-// ===========================
-// UPDATE THE PHONE NUMBER BELOW WITH YOUR ACTUAL WHATSAPP NUMBER
-const WHATSAPP_PHONE_NUMBER = '919999999999'; // Format: country code + number (without +)
+console.log('%c✨ Powered by Firebase Firestore', 'font-size: 11px; color: #4ade80; font-style: italic;');
 
 document.addEventListener('DOMContentLoaded', () => {
     const whatsappBtn = document.querySelector('.whatsapp-btn');
