@@ -10,6 +10,11 @@
  */
 
 // ========================
+// SCRIPT LOADED - DEBUG
+// ========================
+console.log("✅ script.js LOADED AND EXECUTING");
+
+// ========================
 // FIRESTORE IMPORTS
 // ========================
 import { 
@@ -20,6 +25,8 @@ import {
   where,
   initialized as firebaseInitialized 
 } from './firebase-config.js';
+
+console.log("✅ Firebase imports successful");
 
 // ===========================
 // PAGE INITIALIZATION
@@ -91,23 +98,32 @@ let groupedByCategory = {};
 // FIRESTORE MENU LOADING
 // ===========================
 /**
- * Load menu items from Firestore
+ * Load menu items from Firestore with 5-second timeout
  * - Fetches all available menu items from 'menuItems' collection
  * - Only includes items where available === true
  * - Returns grouped by category
+ * - Timeout prevents infinite loading
  */
 async function loadMenuFromFirestore() {
     try {
-        console.log("🔄 Loading menu from Firestore...");
+        console.log("🔄 Fetching menu from Firestore...");
 
-        // Fetch all documents from menuItems collection
-        const snapshot = await getDocs(collection(db, "menuItems"));
-        console.log(`📊 Total docs in Firestore: ${snapshot.size}`);
+        // Create timeout promise (max 5 seconds)
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Firestore timeout - 5s limit')), 5000)
+        );
+
+        // Race: Firestore vs timeout
+        const snapshot = await Promise.race([
+            getDocs(collection(db, "menuItems")),
+            timeoutPromise
+        ]);
+
+        console.log(`📊 Firestore returned ${snapshot.size} documents`);
 
         const items = [];
         snapshot.forEach((doc) => {
             const data = doc.data();
-            console.log("📄 Document:", data);
             
             // Filter only available items
             if (data.available === true) {
@@ -118,12 +134,12 @@ async function loadMenuFromFirestore() {
             }
         });
 
-        console.log(`✅ Filtered items (available=true): ${items.length}`, items);
+        console.log(`✅ Menu loaded successfully: ${items.length} items`);
         return items;
 
     } catch (error) {
-        console.error("❌ Firestore error:", error);
-        console.warn("⚠️ Using fallback menu");
+        console.error("❌ Error loading menu from Firestore:", error.message);
+        console.warn("⚠️ Falling back to local menu");
         return fallbackMenuItems;
     }
 }
@@ -208,6 +224,10 @@ function renderMenu(groupedItems) {
                             <span class="price">₹${item.price} / ${item.unit || 'item'}</span>
                         </div>
                     </div>
+                    <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px; flex-wrap: wrap;">
+                        <a href="https://www.swiggy.com/city/hyderabad/kadaris-lassi-corner-malkajgiri-rest193125" target="_blank" style="background-color: #fc8019; color: white; padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; text-decoration: none; border: none; cursor: pointer;">🛵 Order on Swiggy</a>
+                        <a href="https://www.zomato.com/hyderabad/kadaris-lassi-corner-1-malkajgiri-secunderabad/order" target="_blank" style="background-color: #e23744; color: white; padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; text-decoration: none; border: none; cursor: pointer;">🍕 Order on Zomato</a>
+                    </div>
                 `;
 
                 menuGrid.appendChild(cardElement);
@@ -247,25 +267,24 @@ function showLoadingSpinner() {
 // INITIALIZE MENU
 // ===========================
 async function initializeMenu() {
-    showLoadingSpinner();
+    // Display fallback menu IMMEDIATELY (no spinner)
+    console.log('📋 Displaying fallback menu immediately...');
+    groupedByCategory = groupByCategory(fallbackMenuItems);
+    renderMenu(groupedByCategory);
     
+    // Try to load from Firestore in the background
+    console.log('🔄 Attempting to load menu from Firestore in background...');
     try {
-        // Load menu from Firestore
         allMenuItems = await loadMenuFromFirestore();
         
-        // Group by category
+        // If we get here, Firestore responded with data
+        console.log('✅ Firestore menu loaded! Updating display...');
         groupedByCategory = groupByCategory(allMenuItems);
-        
-        // Render to page
         renderMenu(groupedByCategory);
-        
-        console.log('✅ Menu initialization complete');
         
     } catch (error) {
-        console.error('❌ Failed to initialize menu:', error);
-        // Render fallback
-        groupedByCategory = groupByCategory(fallbackMenuItems);
-        renderMenu(groupedByCategory);
+        console.warn('⚠️ Firestore unavailable or timed out - using fallback menu', error);
+        // Menu already showing fallback, nothing to do
     }
 }
 
@@ -359,8 +378,27 @@ document.addEventListener('DOMContentLoaded', () => {
 // ACTIVE NAVIGATION LINK
 // ===========================
 function updateActiveNavLink() {
-    const sections = document.querySelectorAll('section[id]');
+    // Get the current page filename
+    const currentPage = window.location.pathname.split('/').pop() || 'index.html';
     const navLinks = document.querySelectorAll('.nav-link');
+    
+    // First, handle page links (highlight current page)
+    navLinks.forEach(link => {
+        const href = link.getAttribute('href');
+        
+        // Check if it's a page link (not an anchor)
+        if (href && !href.startsWith('#') && !href.startsWith('http')) {
+            // Check if this link matches the current page
+            if (href === currentPage || (currentPage === '' && href === 'index.html')) {
+                link.classList.add('active');
+            } else {
+                link.classList.remove('active');
+            }
+        }
+    });
+    
+    // For anchor links on the same page, update based on scroll position
+    const sections = document.querySelectorAll('section[id]');
     let currentSection = null;
 
     sections.forEach(section => {
@@ -370,16 +408,15 @@ function updateActiveNavLink() {
         }
     });
 
-    navLinks.forEach(link => {
-        link.style.color = '';
-        link.style.fontWeight = '400';
-    });
-
     if (currentSection) {
         const activeLink = document.querySelector(`.nav-link[href="#${currentSection}"]`);
-        if (activeLink) {
-            activeLink.style.color = 'var(--accent-light)';
-            activeLink.style.fontWeight = '700';
+        if (activeLink && !activeLink.classList.contains('active')) {
+            navLinks.forEach(link => {
+                if (link.getAttribute('href')?.startsWith('#')) {
+                    link.classList.remove('active');
+                }
+            });
+            activeLink.classList.add('active');
         }
     }
 }
